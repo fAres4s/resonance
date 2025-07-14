@@ -1,4 +1,5 @@
-import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
+// 纠正：从导入列表中移除未使用的 AbilityConstant
+import { UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { sensor } from '@kit.SensorServiceKit';
@@ -13,6 +14,7 @@ const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   private vibrationLoopTimerId: number | null = null;
+  private lastVibrationRate: number = 0;
 
   private onHeartRateChange = (data: HeartRateResponse) => {
     const currentHeartRate = data.heartRate;
@@ -40,11 +42,14 @@ export default class EntryAbility extends UIAbility {
       this.stopVibrationLoop();
       return;
     }
-
     const heartRate = AppStorage.get<number>('heartRate');
     if (typeof heartRate === 'number' && heartRate > 0) {
       try {
-        vibrator.startVibration({ type: 'time', duration: 80 }, { usage: 'unknown' })
+        let vibrationEffect: vibrator.VibrateEffect = {
+          type: 'time',
+          duration: 80
+        };
+        vibrator.startVibration(vibrationEffect, { usage: 'unknown' })
           .catch((error: BusinessError) => {
             hilog.error(DOMAIN, 'Vibrator', `Vibration failed. Code: ${error.code}, message: ${error.message}`);
           });
@@ -52,7 +57,6 @@ export default class EntryAbility extends UIAbility {
         const error = err as BusinessError;
         hilog.error(DOMAIN, 'Vibrator', `Vibration start threw an error. Code: ${error.code}, message: ${error.message}`);
       }
-
       const nextInterval = 60000 / (AppStorage.get<number>('heartRate') ?? heartRate);
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, nextInterval);
     } else {
@@ -140,7 +144,7 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+  onCreate(want: Want): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 
