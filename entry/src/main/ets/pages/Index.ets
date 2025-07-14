@@ -1,10 +1,10 @@
 import EntryAbility from '../entryability/EntryAbility';
-// 导入 StorageLinkV2 装饰器
-import { LocalStorageLink } from '@kit.ArkUI';
+// 纠正：移除所有关于 StorageLink 的 import 语句
 
 @Entry
 @Component
 struct HeartRateDisplay {
+  // 正确：直接使用内置的 @StorageLink 装饰器
   @StorageLink('ability') ability: EntryAbility | undefined = undefined;
 
   @State heartRate: number = 0;

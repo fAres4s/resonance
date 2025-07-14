@@ -33,11 +33,7 @@
         ]
       }
     ],
-    "requestPermissions": [
-      {
-      "name": "ohos.permission.health.HEART_RATE"
-      }
-    ],
+
     "extensionAbilities": [
       {
         "name": "EntryBackupAbility",
