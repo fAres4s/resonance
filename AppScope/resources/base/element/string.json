@@ -3,6 +3,22 @@
     {
       "name": "app_name",
       "value": "resonate"
+    },
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "label"
+    },
+    {
+      "name": "health_reason",
+      "value": "该应用需要获取您的心率数据以在表盘上显示"
     }
   ]
 }

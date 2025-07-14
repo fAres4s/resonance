@@ -33,7 +33,19 @@
         ]
       }
     ],
-
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.READ_HEALTH_DATA",
+        "reason": "$string:health_reason",
+        "usedScene": {
+          // 纠正：将 "ability" 修改为 "abilities" (复数)
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      }
+    ],
     "extensionAbilities": [
       {
         "name": "EntryBackupAbility",
@@ -45,8 +57,8 @@
             "name": "ohos.extension.backup",
             "resource": "$profile:backup_config"
           }
-        ],
+        ]
       }
-    ],
+    ]
   }
 }
