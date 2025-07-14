@@ -4,6 +4,8 @@ import { window } from '@kit.ArkUI';
 import { sensor } from '@kit.SensorServiceKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { vibrator } from '@kit.SensorServiceKit';
+import backgroundTaskManager from '@ohos.backgroundTaskManager';
+import wantAgent from '@ohos.wantAgent';
 
 type HeartRateResponse = sensor.HeartRateResponse;
 type WearDetectionResponse = sensor.WearDetectionResponse;
@@ -38,6 +40,7 @@ export default class EntryAbility extends UIAbility {
       this.stopVibrationLoop();
       return;
     }
+
     const heartRate = AppStorage.get<number>('heartRate');
     if (typeof heartRate === 'number' && heartRate > 0) {
       try {
@@ -49,7 +52,8 @@ export default class EntryAbility extends UIAbility {
         const error = err as BusinessError;
         hilog.error(DOMAIN, 'Vibrator', `Vibration start threw an error. Code: ${error.code}, message: ${error.message}`);
       }
-      const nextInterval = 60000 / heartRate;
+
+      const nextInterval = 60000 / (AppStorage.get<number>('heartRate') ?? heartRate);
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, nextInterval);
     } else {
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, 1000);
@@ -77,16 +81,62 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  // 纠正：新增一个公开方法，用于被UI调用
   public handleVibrationToggle(): void {
     const isVibrationOn = AppStorage.get<boolean>('isVibrationOn');
     const isWorn = AppStorage.get<boolean>('isWorn');
     hilog.info(DOMAIN, 'VibratorToggle', `Vibration toggled by UI. New state: ${isVibrationOn}`);
-
     if (isVibrationOn && isWorn) {
       this.startVibrationLoop();
     } else {
       this.stopVibrationLoop();
+    }
+  }
+
+  private startContinuousTask(): void {
+    hilog.info(DOMAIN, 'ContinuousTask', 'Attempting to start continuous task...');
+    const wants: Want[] = [{
+      bundleName: this.context.abilityInfo.bundleName,
+      abilityName: this.context.abilityInfo.name
+    }];
+    try {
+      wantAgent.getWantAgent({
+        wants: wants,
+        operationType: wantAgent.OperationType.START_ABILITY,
+        requestCode: 0,
+        wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+      }).then((wantAgentObj) => {
+        try {
+          backgroundTaskManager.startBackgroundRunning(this.context, backgroundTaskManager.BackgroundMode.DATA_TRANSFER, wantAgentObj)
+            .then(() => {
+              hilog.info(DOMAIN, 'ContinuousTask', 'Succeeded in starting background running.');
+            }).catch((err: BusinessError) => {
+            hilog.error(DOMAIN, 'ContinuousTask', `Failed to start background running. Code: ${err.code}, message: ${err.message}`);
+          });
+        } catch (error) {
+          const e = error as BusinessError;
+          hilog.error(DOMAIN, 'ContinuousTask', `startBackgroundRunning threw an error. Code: ${e.code}, message: ${e.message}`);
+        }
+      }).catch((err: BusinessError) => {
+        hilog.error(DOMAIN, 'ContinuousTask', `getWantAgent failed. Code: ${err.code}, message: ${err.message}`);
+      });
+    } catch (error) {
+      const e = error as BusinessError;
+      hilog.error(DOMAIN, 'ContinuousTask', `getWantAgent threw an error. Code: ${e.code}, message: ${e.message}`);
+    }
+  }
+
+  private stopContinuousTask(): void {
+    hilog.info(DOMAIN, 'ContinuousTask', 'Attempting to stop continuous task...');
+    try {
+      backgroundTaskManager.stopBackgroundRunning(this.context)
+        .then(() => {
+          hilog.info(DOMAIN, 'ContinuousTask', 'Succeeded in stopping background running.');
+        }).catch((err: BusinessError) => {
+        hilog.error(DOMAIN, 'ContinuousTask', `Failed to stop background running. Code: ${err.code}, message: ${err.message}`);
+      });
+    } catch (error) {
+      const e = error as BusinessError;
+      hilog.error(DOMAIN, 'ContinuousTask', `stopBackgroundRunning threw an error. Code: ${e.code}, message: ${e.message}`);
     }
   }
 
@@ -105,8 +155,6 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('heartRate', 0);
     AppStorage.setOrCreate('isWorn', false);
     AppStorage.setOrCreate('isVibrationOn', true);
-
-    // 纠正：将启动页面从 'pages/Index' 重新改回 'pages/ModeSelection'
     windowStage.loadContent('pages/ModeSelection', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', `Failed to load the content. Cause: ${JSON.stringify(err)}`);
@@ -116,7 +164,6 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
-  // ... (其余方法保持不变，但修正了它们的可见性)
   onWindowStageDestroy(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
   }
@@ -125,6 +172,7 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void { }
 
   public startMonitoring(): void {
+    this.startContinuousTask();
     try {
       hilog.info(DOMAIN, 'WearDetection', 'Subscribing to wear detection sensor...');
       sensor.on(sensor.SensorId.WEAR_DETECTION, this.onWearStatusChange, { interval: 200000000 });
@@ -135,6 +183,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   public stopMonitoring(): void {
+    this.stopContinuousTask();
     this.stopVibrationLoop();
     this.stopGettingHeartRate();
     try {
@@ -157,7 +206,6 @@ export default class EntryAbility extends UIAbility {
   }
 
   public stopGettingHeartRate(): void {
-    // 停止心率监测时，不需要再停止振动循环，因为 onWearStatusChange 会处理
     try {
       hilog.info(DOMAIN, 'HeartRate', 'Unsubscribing from heart rate sensor.');
       sensor.off(sensor.SensorId.HEART_RATE);

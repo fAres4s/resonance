@@ -2,6 +2,7 @@ import EntryAbility from '../entryability/EntryAbility';
 import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { window } from '@kit.ArkUI';
 
 const DOMAIN = 0x0000;
 
@@ -12,6 +13,8 @@ struct HeartRateDisplay {
   @StorageLink('heartRate') heartRate: number = 0;
   @StorageLink('isWorn') isWorn: boolean = false;
   @StorageLink('isVibrationOn') isVibrationOn: boolean = true;
+  private windowClass: window.Window | undefined = undefined;
+
 
   async requestPermissionAndStart() {
     if (!this.ability) {
@@ -35,13 +38,37 @@ struct HeartRateDisplay {
     }
   }
 
-  aboutToAppear() {
+  // aboutToAppear 现在使用 async/await 来处理异步操作
+  async aboutToAppear() {
     this.requestPermissionAndStart();
+
+    // 规范重写：使用 async/await 语法，并加上完整的 try/catch 错误处理
+    try {
+      const windowClass = await window.getLastWindow(getContext(this));
+      this.windowClass = windowClass;
+      await this.windowClass.setWindowKeepScreenOn(true);
+      hilog.info(DOMAIN, 'ScreenOn', 'Succeeded in setting the screen to be always on.');
+    } catch (exception) {
+      // exception可能是BusinessError或其他类型，使用 as 进行类型断言
+      const error = exception as BusinessError;
+      hilog.error(DOMAIN, 'ScreenOn', `Failed to set screen on. Code: ${error.code}, message: ${error.message}`);
+    }
   }
 
-  aboutToDisappear() {
+  async aboutToDisappear() {
     if (this.ability) {
       this.ability.stopMonitoring();
+    }
+
+    // 规范重写：同样使用 async/await 语法
+    if (this.windowClass) {
+      try {
+        await this.windowClass.setWindowKeepScreenOn(false);
+        hilog.info(DOMAIN, 'ScreenOn', 'Succeeded in setting the screen to be off.');
+      } catch (exception) {
+        const error = exception as BusinessError;
+        hilog.error(DOMAIN, 'ScreenOn', `Failed to set screen off. Code: ${error.code}, message: ${error.message}`);
+      }
     }
   }
 
@@ -63,9 +90,7 @@ struct HeartRateDisplay {
         .margin({ top: 40 })
         .backgroundColor(this.isVibrationOn ? '#007DFF' : '#555555')
         .onClick(() => {
-          // 1. 改变状态
           this.isVibrationOn = !this.isVibrationOn;
-          // 2. 明确调用Ability中的方法来处理这个状态变化
           if (this.ability) {
             this.ability.handleVibrationToggle();
           }
