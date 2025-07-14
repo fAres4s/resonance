@@ -38,12 +38,15 @@
         "name": "ohos.permission.READ_HEALTH_DATA",
         "reason": "$string:health_reason",
         "usedScene": {
-          // 纠正：将 "ability" 修改为 "abilities" (复数)
           "abilities": [
             "EntryAbility"
           ],
           "when": "inuse"
         }
+      },
+      // 新增：声明振动权限
+      {
+        "name": "ohos.permission.VIBRATE"
       }
     ],
     "extensionAbilities": [
