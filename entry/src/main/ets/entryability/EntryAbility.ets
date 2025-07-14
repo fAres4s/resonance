@@ -34,15 +34,12 @@ export default class EntryAbility extends UIAbility {
 
   private vibrationLoop = () => {
     const isVibrationOn = AppStorage.get<boolean>('isVibrationOn');
-    if (isVibrationOn !== true) { // 使用严格比较，确保只有在明确为 true 时才继续
+    if (isVibrationOn !== true) {
       this.stopVibrationLoop();
       return;
     }
-
-    // 关键修正点：在使用前，检查从AppStorage取出的值是否存在
     const heartRate = AppStorage.get<number>('heartRate');
     if (typeof heartRate === 'number' && heartRate > 0) {
-      // 只有当heartRate是一个有效数字且大于0时，才执行振动和计算
       try {
         vibrator.startVibration({ type: 'time', duration: 80 }, { usage: 'unknown' })
           .catch((error: BusinessError) => {
@@ -52,19 +49,19 @@ export default class EntryAbility extends UIAbility {
         const error = err as BusinessError;
         hilog.error(DOMAIN, 'Vibrator', `Vibration start threw an error. Code: ${error.code}, message: ${error.message}`);
       }
-
       const nextInterval = 60000 / heartRate;
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, nextInterval);
     } else {
-      // 如果heartRate是0, null, 或 undefined, 则等待1秒后重试
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, 1000);
     }
   }
 
   private startVibrationLoop(): void {
     if (this.vibrationLoopTimerId !== null) { return; }
-    hilog.info(DOMAIN, 'Vibrator', 'Starting vibration loop...');
-    this.vibrationLoop();
+    if (AppStorage.get<boolean>('isVibrationOn') === true) {
+      hilog.info(DOMAIN, 'Vibrator', 'Starting vibration loop...');
+      this.vibrationLoop();
+    }
   }
 
   private stopVibrationLoop(): void {
@@ -80,7 +77,19 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  // ... (其他所有方法保持不变)
+  // 纠正：新增一个公开方法，用于被UI调用
+  public handleVibrationToggle(): void {
+    const isVibrationOn = AppStorage.get<boolean>('isVibrationOn');
+    const isWorn = AppStorage.get<boolean>('isWorn');
+    hilog.info(DOMAIN, 'VibratorToggle', `Vibration toggled by UI. New state: ${isVibrationOn}`);
+
+    if (isVibrationOn && isWorn) {
+      this.startVibrationLoop();
+    } else {
+      this.stopVibrationLoop();
+    }
+  }
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
@@ -96,7 +105,9 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('heartRate', 0);
     AppStorage.setOrCreate('isWorn', false);
     AppStorage.setOrCreate('isVibrationOn', true);
-    windowStage.loadContent('pages/Index', (err) => {
+
+    // 纠正：将启动页面从 'pages/Index' 重新改回 'pages/ModeSelection'
+    windowStage.loadContent('pages/ModeSelection', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', `Failed to load the content. Cause: ${JSON.stringify(err)}`);
         return;
@@ -105,6 +116,7 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
+  // ... (其余方法保持不变，但修正了它们的可见性)
   onWindowStageDestroy(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
   }
@@ -145,6 +157,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   public stopGettingHeartRate(): void {
+    // 停止心率监测时，不需要再停止振动循环，因为 onWearStatusChange 会处理
     try {
       hilog.info(DOMAIN, 'HeartRate', 'Unsubscribing from heart rate sensor.');
       sensor.off(sensor.SensorId.HEART_RATE);

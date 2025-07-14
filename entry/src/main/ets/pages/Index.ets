@@ -11,7 +11,6 @@ struct HeartRateDisplay {
   @StorageLink('ability') ability: EntryAbility | undefined = undefined;
   @StorageLink('heartRate') heartRate: number = 0;
   @StorageLink('isWorn') isWorn: boolean = false;
-  // 新增：绑定振动开关的状态
   @StorageLink('isVibrationOn') isVibrationOn: boolean = true;
 
   async requestPermissionAndStart() {
@@ -59,21 +58,16 @@ struct HeartRateDisplay {
         .fontSize(16)
         .textAlign(TextAlign.Center);
 
-      // 新增：振动开关按钮
       Button(this.isVibrationOn ? '振动已开' : '振动已关')
-        .type(ButtonType.Capsule) // 胶囊样式
+        .type(ButtonType.Capsule)
         .margin({ top: 40 })
-        .backgroundColor(this.isVibrationOn ? '#007DFF' : '#555555') // 根据状态改变颜色
+        .backgroundColor(this.isVibrationOn ? '#007DFF' : '#555555')
         .onClick(() => {
-          // 点击时，直接改变绑定的状态变量
-          // @StorageLink会自动将这个改变同步回AppStorage
+          // 1. 改变状态
           this.isVibrationOn = !this.isVibrationOn;
-          if (!this.isVibrationOn) {
-            // 如果是关闭振动，立即停止当前所有振动
-            if (this.ability) {
-              this.ability.stopGettingHeartRate();
-              this.ability.startGettingHeartRate(); // 重启心率但不振动
-            }
+          // 2. 明确调用Ability中的方法来处理这个状态变化
+          if (this.ability) {
+            this.ability.handleVibrationToggle();
           }
         })
     }

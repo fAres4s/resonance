@@ -44,9 +44,12 @@
           "when": "inuse"
         }
       },
-      // 新增：声明振动权限
       {
         "name": "ohos.permission.VIBRATE"
+      },
+      // 新增：申请后台持续运行权限
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
       }
     ],
     "extensionAbilities": [

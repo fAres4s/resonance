@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/farest/.ohos/config/default_resonate_ZWydmJrbwBXJ8SVh36WAH5_Cg7Dif0SFK-yUYoKJvfk=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "00000018E7D47CF2F4E4DB8283F63CA59CF354EE1E25B1C65AE34512940BFE81003C6E2FCDCC345B",
+          "keyPassword": "000000181C4C2D6293C52B755D7939E39E51AFE6411765506BA80AC005AD04C653E005E516DFC745",
           "profile": "/Users/farest/.ohos/config/default_resonate_ZWydmJrbwBXJ8SVh36WAH5_Cg7Dif0SFK-yUYoKJvfk=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/farest/.ohos/config/default_resonate_ZWydmJrbwBXJ8SVh36WAH5_Cg7Dif0SFK-yUYoKJvfk=.p12",
-          "storePassword": "00000018F86C4CA776363F3E7B7EC6B8F3AA096290F76DFC2CCAA41BFEB21AE624CB988F0A4843D5"
+          "storePassword": "00000018C8322503DAAA8BFEB7502C8C7DFFA97E03DE3EA96B08274D48ACF3CA50F790D2008E0165"
         }
       }
     ],
