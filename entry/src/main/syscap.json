@@ -1,0 +1,14 @@
+{
+  "devices": {
+    "general": [
+      "phone",
+      "wearable"
+    ]
+  },
+  "development": {
+    "addedSysCaps": [
+      "SystemCapability.Communication.NFC.Core",
+      "SystemCapability.Communication.ConnectedTag"
+    ]
+  }
+}

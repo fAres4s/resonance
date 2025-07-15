@@ -1,6 +1,7 @@
 {
   "src": [
     "pages/ModeSelection",
-    "pages/Index"
+    "pages/Index",
+    "pages/NfcPairing"
   ]
 }

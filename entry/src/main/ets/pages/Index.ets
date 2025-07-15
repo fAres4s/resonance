@@ -1,4 +1,4 @@
-import EntryAbility from '../entryability/EntryAbility';
+import { EntryAbility } from '../entryability/EntryAbility'; // 修正：使用命名导入
 import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';

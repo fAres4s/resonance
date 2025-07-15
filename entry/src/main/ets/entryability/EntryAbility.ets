@@ -12,7 +12,8 @@ type HeartRateResponse = sensor.HeartRateResponse;
 type WearDetectionResponse = sensor.WearDetectionResponse;
 const DOMAIN = 0x0000;
 
-export default class EntryAbility extends UIAbility {
+// 修正：将 "export default" 修改为 "export"
+export class EntryAbility extends UIAbility {
   private vibrationLoopTimerId: number | null = null;
   private lastVibrationRate: number = 0;
 

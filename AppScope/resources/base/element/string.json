@@ -19,6 +19,10 @@
     {
       "name": "health_reason",
       "value": "该应用需要获取您的心率数据以在表盘上显示"
+    },
+    {
+      "name": "bluetooth_reason",
+      "value": "用于发现和连接附近的“共鸣”设备，以同步心率"
     }
   ]
 }
