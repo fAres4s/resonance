@@ -7,6 +7,8 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { vibrator } from '@kit.SensorServiceKit';
 import backgroundTaskManager from '@ohos.backgroundTaskManager';
 import wantAgent from '@ohos.wantAgent';
+import { ble } from '@kit.ConnectivityKit';
+import util from '@ohos.util';
 
 type HeartRateResponse = sensor.HeartRateResponse;
 type WearDetectionResponse = sensor.WearDetectionResponse;
@@ -16,11 +18,20 @@ const DOMAIN = 0x0000;
 export class EntryAbility extends UIAbility {
   private vibrationLoopTimerId: number | null = null;
   private lastVibrationRate: number = 0;
+  private gattServer: ble.GattServer | null = null;
+  private gattClient: ble.GattClientDevice | null = null;
+  private textEncoder = new util.TextEncoder();
+  private textDecoder = new util.TextDecoder('utf-8');
 
   private onHeartRateChange = (data: HeartRateResponse) => {
     const currentHeartRate = data.heartRate;
     if (data && typeof currentHeartRate === 'number' && currentHeartRate < 255) {
       AppStorage.set('heartRate', currentHeartRate);
+      // 在双机模式下，发送心率数据给对方
+      const isDualMode = AppStorage.get<boolean>('isDualMode') ?? false;
+      if (isDualMode) {
+        this.sendHeartRateToPeer();
+      }
     }
   };
 
@@ -43,7 +54,11 @@ export class EntryAbility extends UIAbility {
       this.stopVibrationLoop();
       return;
     }
-    const heartRate = AppStorage.get<number>('heartRate');
+    // 在双机模式下，使用对方心率；单机模式下使用本机心率
+    const isDualMode = AppStorage.get<boolean>('isDualMode') ?? false;
+    const heartRate = isDualMode ? 
+      (AppStorage.get<number>('peerHeartRate') ?? 0) : 
+      (AppStorage.get<number>('heartRate') ?? 0);
     if (typeof heartRate === 'number' && heartRate > 0) {
       try {
         let vibrationEffect: vibrator.VibrateEffect = {
@@ -58,7 +73,7 @@ export class EntryAbility extends UIAbility {
         const error = err as BusinessError;
         hilog.error(DOMAIN, 'Vibrator', `Vibration start threw an error. Code: ${error.code}, message: ${error.message}`);
       }
-      const nextInterval = 60000 / (AppStorage.get<number>('heartRate') ?? heartRate);
+      const nextInterval = 60000 / heartRate;
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, nextInterval);
     } else {
       this.vibrationLoopTimerId = setTimeout(this.vibrationLoop, 1000);
@@ -158,8 +173,13 @@ export class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
     AppStorage.setOrCreate('ability', this);
     AppStorage.setOrCreate('heartRate', 0);
+    AppStorage.setOrCreate('peerHeartRate', 0);
     AppStorage.setOrCreate('isWorn', false);
     AppStorage.setOrCreate('isVibrationOn', true);
+    AppStorage.setOrCreate('isDualMode', false);
+    AppStorage.setOrCreate('peerDeviceId', '');
+    AppStorage.setOrCreate('gattServer', null);
+    AppStorage.setOrCreate('gattClient', null);
     windowStage.loadContent('pages/ModeSelection', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', `Failed to load the content. Cause: ${JSON.stringify(err)}`);
@@ -218,5 +238,159 @@ export class EntryAbility extends UIAbility {
       const error = err as BusinessError;
       hilog.error(DOMAIN, 'HeartRate', `Failed to unsubscribe. Code: ${error.code}, message: ${error.message}`);
     }
+  }
+
+  // 双机模式：设置GATT服务器
+  public setGattServer(gattServer: ble.GattServer | null): void {
+    this.gattServer = gattServer;
+    AppStorage.setOrCreate('gattServer', gattServer);
+    if (gattServer) {
+      this.setupGattServerCallbacks();
+    }
+  }
+
+  // 双机模式：设置GATT客户端
+  public setGattClient(gattClient: ble.GattClientDevice | null): void {
+    this.gattClient = gattClient;
+    AppStorage.setOrCreate('gattClient', gattClient);
+    if (gattClient) {
+      this.setupGattClientCallbacks();
+    }
+  }
+
+  // 设置GATT服务器回调
+  private setupGattServerCallbacks(): void {
+    if (!this.gattServer) return;
+    
+    this.gattServer.on('characteristicRead', (characteristicReadRequest) => {
+      hilog.info(DOMAIN, 'GattServer', 'Characteristic read request received');
+      // 发送本机心率给对方
+      const heartRate = AppStorage.get<number>('heartRate') ?? 0;
+      const heartRateData = new ArrayBuffer(4);
+      const view = new DataView(heartRateData);
+      view.setUint32(0, heartRate, true);
+      
+      const response: ble.ServerResponse = {
+        deviceId: characteristicReadRequest.deviceId,
+        transId: characteristicReadRequest.transId,
+        status: 0,
+        offset: characteristicReadRequest.offset,
+        value: heartRateData
+      };
+      this.gattServer?.sendResponse(response);
+    });
+
+    this.gattServer.on('characteristicWrite', (characteristicWriteRequest) => {
+      hilog.info(DOMAIN, 'GattServer', 'Characteristic write request received');
+      // 接收对方心率
+      if (characteristicWriteRequest.value && characteristicWriteRequest.value.byteLength >= 4) {
+        const view = new DataView(characteristicWriteRequest.value);
+        const peerHeartRate = view.getUint32(0, true);
+        hilog.info(DOMAIN, 'GattServer', `Received peer heart rate: ${peerHeartRate}`);
+        AppStorage.set('peerHeartRate', peerHeartRate);
+      }
+    });
+  }
+
+  // 设置GATT客户端回调
+  private setupGattClientCallbacks(): void {
+    if (!this.gattClient) return;
+
+    this.gattClient.on('BLECharacteristicChange', (characteristicChangeInfo) => {
+      hilog.info(DOMAIN, 'GattClient', 'Characteristic changed');
+      // 接收对方心率通知
+      if (characteristicChangeInfo.characteristicValue && characteristicChangeInfo.characteristicValue.byteLength >= 4) {
+        const view = new DataView(characteristicChangeInfo.characteristicValue);
+        const peerHeartRate = view.getUint32(0, true);
+        hilog.info(DOMAIN, 'GattClient', `Received peer heart rate notification: ${peerHeartRate}`);
+        AppStorage.set('peerHeartRate', peerHeartRate);
+      }
+    });
+
+    // 连接成功后启用特征值通知
+    try {
+      const serviceUUID = '0000FD01-0000-1000-8000-00805F9B34FB';
+      const characteristicUUID = '0000FD02-0000-1000-8000-00805F9B34FB';
+      
+      const characteristic: ble.BLECharacteristic = {
+        serviceUuid: serviceUUID,
+        characteristicUuid: characteristicUUID,
+        characteristicValue: new ArrayBuffer(0),
+        descriptors: [],
+        properties: { notify: true }
+      };
+      this.gattClient.setCharacteristicChangeNotification(characteristic, true);
+      hilog.info(DOMAIN, 'GattClient', 'Enabled characteristic notifications');
+    } catch (err) {
+      hilog.error(DOMAIN, 'GattClient', `Failed to enable notifications: ${(err as BusinessError).message}`);
+    }
+  }
+
+  // 发送本机心率给对方
+  public sendHeartRateToPeer(): void {
+    const heartRate = AppStorage.get<number>('heartRate') ?? 0;
+    if (heartRate <= 0) return;
+
+    const heartRateData = new ArrayBuffer(4);
+    const view = new DataView(heartRateData);
+    view.setUint32(0, heartRate, true);
+
+    const serviceUUID = '0000FD01-0000-1000-8000-00805F9B34FB';
+    const characteristicUUID = '0000FD02-0000-1000-8000-00805F9B34FB';
+
+    if (this.gattClient) {
+      // 客户端写入心率数据
+      try {
+        const characteristic: ble.BLECharacteristic = {
+          serviceUuid: serviceUUID,
+          characteristicUuid: characteristicUUID,
+          characteristicValue: heartRateData,
+          descriptors: [],
+          properties: { write: true }
+        };
+        this.gattClient.writeCharacteristicValue(characteristic, ble.GattWriteType.WRITE);
+        hilog.info(DOMAIN, 'GattClient', `Sent heart rate to peer: ${heartRate}`);
+      } catch (err) {
+        hilog.error(DOMAIN, 'GattClient', `Failed to write characteristic: ${(err as BusinessError).message}`);
+      }
+    }
+
+    if (this.gattServer) {
+      // 服务器发送通知
+      try {
+        const deviceId = AppStorage.get<string>('peerDeviceId') ?? '';
+        if (deviceId) {
+          const notifyCharacteristic: ble.NotifyCharacteristic = {
+            serviceUuid: serviceUUID,
+            characteristicUuid: characteristicUUID,
+            characteristicValue: heartRateData,
+            confirm: false
+          };
+          this.gattServer.notifyCharacteristicChanged(deviceId, notifyCharacteristic);
+          hilog.info(DOMAIN, 'GattServer', `Sent heart rate notification to peer: ${heartRate}`);
+        }
+      } catch (err) {
+        hilog.error(DOMAIN, 'GattServer', `Failed to notify characteristic: ${(err as BusinessError).message}`);
+      }
+    }
+  }
+
+  // 启用双机模式
+  public enableDualMode(peerDeviceId: string): void {
+    AppStorage.set('isDualMode', true);
+    AppStorage.set('peerDeviceId', peerDeviceId);
+    hilog.info(DOMAIN, 'DualMode', `Enabled dual mode with peer: ${peerDeviceId}`);
+  }
+
+  // 禁用双机模式
+  public disableDualMode(): void {
+    AppStorage.set('isDualMode', false);
+    AppStorage.set('peerDeviceId', '');
+    AppStorage.set('peerHeartRate', 0);
+    this.gattServer = null;
+    this.gattClient = null;
+    AppStorage.set('gattServer', null);
+    AppStorage.set('gattClient', null);
+    hilog.info(DOMAIN, 'DualMode', 'Disabled dual mode');
   }
 }

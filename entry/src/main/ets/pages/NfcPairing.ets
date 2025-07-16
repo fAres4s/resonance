@@ -312,9 +312,22 @@ struct NfcPairing {
     hilog.info(DOMAIN, 'NfcPairing', `${role} Connection State Changed: ${JSON.stringify(state)}`);
     if (state.state === constant.ProfileConnectionState.STATE_CONNECTED) {
       this.message = '已连接！';
+      // 设置EntryAbility的GATT对象和双机模式
+      if (this.ability) {
+        if (role === 'Server' && this.gattServer) {
+          this.ability.setGattServer(this.gattServer);
+        } else if (role === 'Client' && this.gattClient) {
+          this.ability.setGattClient(this.gattClient);
+        }
+        this.ability.enableDualMode(state.deviceId);
+      }
       this.navigateToDualModePage(state.deviceId);
     } else if (state.state === constant.ProfileConnectionState.STATE_DISCONNECTED) {
       this.message = '连接已断开';
+      // 禁用双机模式
+      if (this.ability) {
+        this.ability.disableDualMode();
+      }
       void this.resetState();
     }
   }

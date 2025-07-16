@@ -3,6 +3,7 @@ import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import router from '@ohos.router';
 
 const DOMAIN = 0x0000;
 
@@ -11,8 +12,11 @@ const DOMAIN = 0x0000;
 struct HeartRateDisplay {
   @StorageLink('ability') ability: EntryAbility | undefined = undefined;
   @StorageLink('heartRate') heartRate: number = 0;
+  @StorageLink('peerHeartRate') peerHeartRate: number = 0;
   @StorageLink('isWorn') isWorn: boolean = false;
   @StorageLink('isVibrationOn') isVibrationOn: boolean = true;
+  @StorageLink('isDualMode') isDualMode: boolean = false;
+  @StorageLink('peerDeviceId') peerDeviceId: string = '';
   private windowClass: window.Window | undefined = undefined;
 
 
@@ -40,7 +44,18 @@ struct HeartRateDisplay {
 
   // aboutToAppear 现在使用 async/await 来处理异步操作
   async aboutToAppear() {
-    this.requestPermissionAndStart();
+    // 检查是否是从双机模式跳转过来的
+    const params = router.getParams() as Record<string, Object> | null;
+    if (params && params['mode'] === 'dual') {
+      hilog.info(DOMAIN, 'Index', 'Entered dual mode');
+      // 双机模式下不需要请求权限，因为已经在配对页面处理过了
+    } else {
+      // 单机模式：确保关闭双机模式状态
+      if (this.ability) {
+        this.ability.disableDualMode();
+      }
+      this.requestPermissionAndStart();
+    }
 
     // 规范重写：使用 async/await 语法，并加上完整的 try/catch 错误处理
     try {
@@ -74,16 +89,64 @@ struct HeartRateDisplay {
 
   @Builder HeartRateView() {
     Column() {
-      Text('当前心率')
-        .fontSize(20)
-        .textAlign(TextAlign.Center);
-      Text(this.heartRate > 0 ? this.heartRate.toString() : '--')
-        .fontSize(40)
-        .fontColor(Color.Red)
-        .textAlign(TextAlign.Center);
-      Text('BPM')
-        .fontSize(16)
-        .textAlign(TextAlign.Center);
+      if (this.isDualMode) {
+        // 双机模式显示
+        Text('双机共鸣模式')
+          .fontSize(18)
+          .fontColor(Color.Blue)
+          .textAlign(TextAlign.Center)
+          .margin({ bottom: 10 });
+        
+        Row({ space: 40 }) {
+          Column() {
+            Text('我的心率')
+              .fontSize(16)
+              .textAlign(TextAlign.Center);
+            Text(this.heartRate > 0 ? this.heartRate.toString() : '--')
+              .fontSize(32)
+              .fontColor(Color.Red)
+              .textAlign(TextAlign.Center);
+            Text('BPM')
+              .fontSize(14)
+              .textAlign(TextAlign.Center);
+          }
+          .layoutWeight(1);
+
+          Column() {
+            Text('对方心率')
+              .fontSize(16)
+              .textAlign(TextAlign.Center);
+            Text(this.peerHeartRate > 0 ? this.peerHeartRate.toString() : '--')
+              .fontSize(32)
+              .fontColor(Color.Green)
+              .textAlign(TextAlign.Center);
+            Text('BPM')
+              .fontSize(14)
+              .textAlign(TextAlign.Center);
+          }
+          .layoutWeight(1);
+        }
+        .width('100%')
+        .margin({ bottom: 20 });
+
+        Text(`振动反馈: ${this.peerHeartRate > 0 ? '对方心率' : '等待连接'}`)
+          .fontSize(14)
+          .fontColor(Color.Gray)
+          .textAlign(TextAlign.Center)
+          .margin({ bottom: 20 });
+      } else {
+        // 单机模式显示
+        Text('当前心率')
+          .fontSize(20)
+          .textAlign(TextAlign.Center);
+        Text(this.heartRate > 0 ? this.heartRate.toString() : '--')
+          .fontSize(40)
+          .fontColor(Color.Red)
+          .textAlign(TextAlign.Center);
+        Text('BPM')
+          .fontSize(16)
+          .textAlign(TextAlign.Center);
+      }
 
       Button(this.isVibrationOn ? '振动已开' : '振动已关')
         .type(ButtonType.Capsule)
@@ -95,6 +158,19 @@ struct HeartRateDisplay {
             this.ability.handleVibrationToggle();
           }
         })
+
+      if (this.isDualMode) {
+        Button('断开连接')
+          .type(ButtonType.Capsule)
+          .margin({ top: 20 })
+          .backgroundColor(Color.Gray)
+          .onClick(() => {
+            if (this.ability) {
+              this.ability.disableDualMode();
+            }
+            router.back();
+          })
+      }
     }
     .width('100%');
   }
